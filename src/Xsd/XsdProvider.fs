@@ -133,7 +133,7 @@ type public XsdProvider(cfg:TypeProviderConfig) as this =
                 let res = providedType.GetMember(n) 
                 match res with
                   [||] -> 
-                      failwithf "Could not find a provided type for %s" n
+                      ()
                   | [|res|] when (res :? ProvidedTypeDefinition) ->
                       let resultType = res :?> ProvidedTypeDefinition
                       let args = [ ProvidedParameter("text", typeof<string>) ]
@@ -160,7 +160,10 @@ type public XsdProvider(cfg:TypeProviderConfig) as this =
                         |> fun reader -> result.Converter <@@ XmlElement.Create(%reader) @@>
                       m.AddXmlDoc <| sprintf "Parses the specified XML string as a %s" n
                       tpType.AddMember m
-                  | [|res|] -> failwithf "%s is not a provided type but a " res.Name (res.GetType().Name)
+                  | [|res|] -> 
+                      let name = res.Name
+                      let typeName = res.GetType().Name
+                      failwithf "%s is not a provided type but a %s" name typeName
                   | _ as res -> failwithf "Found several nested types (%A) with the name %s" res n
               | _ -> ()
           

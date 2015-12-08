@@ -16,6 +16,45 @@ module debug =
     let print = System.Diagnostics.Debug.Print
 
 module XsdBuilder =
+    let private XsdNamespace = "http://www.w3.org/2001/XMLSchema"
+    let private NativeTypes = 
+       [for (name,t)  in 
+            [("string"      , typeof<string>);
+             ("anyURI"      , typeof<string>);
+             ("base64string", typeof<string>);
+             ("hexBinary"   , typeof<string>);
+             ("NMTOKEN"     , typeof<string>);
+             ("integer"     , typeof<int>);
+             ("int"         , typeof<int>);
+             ("byte"        , typeof<System.Int16>);
+             ("double"      , typeof<System.Double>);
+             ("decimal"     , typeof<System.Decimal>);
+             ("float"       , typeof<System.Single>);
+             ("dateTime"    , typeof<DateTime>);
+             ("time"        , typeof<DateTime>);
+             ("date"        , typeof<DateTime>);
+             ("duration"    , typeof<TimeSpan>);
+             ("boolean"     , typeof<bool>);
+             ("{http://www.w3.org/2001/XMLSchema}string"      , typeof<string>);
+             ("{http://www.w3.org/2001/XMLSchema}anyURI"      , typeof<string>);
+             ("{http://www.w3.org/2001/XMLSchema}base64string", typeof<string>);
+             ("{http://www.w3.org/2001/XMLSchema}hexBinary"   , typeof<string>);
+             ("{http://www.w3.org/2001/XMLSchema}NMTOKEN"     , typeof<string>);
+             ("{http://www.w3.org/2001/XMLSchema}integer"     , typeof<int>);
+             ("{http://www.w3.org/2001/XMLSchema}int"         , typeof<int>);
+             ("{http://www.w3.org/2001/XMLSchema}byte"        , typeof<System.Int16>);
+             ("{http://www.w3.org/2001/XMLSchema}double"      , typeof<System.Double>);
+             ("{http://www.w3.org/2001/XMLSchema}decimal"     , typeof<System.Decimal>);
+             ("{http://www.w3.org/2001/XMLSchema}float"       , typeof<System.Single>);
+             ("{http://www.w3.org/2001/XMLSchema}dateTime"    , typeof<DateTime>);
+             ("{http://www.w3.org/2001/XMLSchema}time"        , typeof<DateTime>);
+             ("{http://www.w3.org/2001/XMLSchema}date"        , typeof<DateTime>);
+             ("{http://www.w3.org/2001/XMLSchema}duration"    , typeof<TimeSpan>);
+             ("{http://www.w3.org/2001/XMLSchema}boolean"     , typeof<bool>);
+             ] 
+               do
+                  yield (name, InferedType.Primitive(t,None,false))] |> Map.ofList
+
     type Particle = 
        Sequence of XmlSchemaSequence
        | Choice of XmlSchemaChoice
@@ -59,6 +98,8 @@ module XsdBuilder =
     type XmlType = 
        Complex of ComplexType
        | Simple of SimpleType
+       | Native of InferedType
+
     let qnToString (qn:System.Xml.XmlQualifiedName) =
         if String.IsNullOrWhiteSpace(qn.Namespace) then
             qn.Name
@@ -106,19 +147,23 @@ module XsdBuilder =
        
        match obj with
        | :? XmlSchemaSimpleType as t -> 
-           let content = 
-                match t.Content with
-                null -> Basic t
-                | _ as model -> 
-                    match model with
-                    :? XmlSchemaSimpleTypeRestriction as restriction ->
-                      SimpleType.Restricted(t, SimpleContent.Restriction(restriction))
-                    | :? XmlSchemaSimpleTypeUnion as union -> 
-                      SimpleType.Restricted(t, SimpleContent.Union(union))
-                    | :? XmlSchemaSimpleTypeList as list -> 
-                      SimpleType.Restricted(t, SimpleContent.List(list))
-                    | _ -> failwithf "Unknkown content for simple type %A" model
-           Type(Simple content)
+           if t.QualifiedName.Namespace = XsdNamespace then
+              let name = t.QualifiedName |> qnToString
+              Type(Native(NativeTypes.[name]))
+           else
+               let content = 
+                    match t.Content with
+                    null -> Basic t
+                    | _ as model -> 
+                        match model with
+                        :? XmlSchemaSimpleTypeRestriction as restriction ->
+                          SimpleType.Restricted(t, SimpleContent.Restriction(restriction))
+                        | :? XmlSchemaSimpleTypeUnion as union -> 
+                          SimpleType.Restricted(t, SimpleContent.Union(union))
+                        | :? XmlSchemaSimpleTypeList as list -> 
+                          SimpleType.Restricted(t, SimpleContent.List(list))
+                        | _ -> failwithf "Unknkown content for simple type %A" model
+               Type(Simple content)
        | :? XmlSchemaComplexType as t -> 
            let model =
               match t.ContentModel with
@@ -318,51 +363,8 @@ module XsdBuilder =
              Elements = elements
          }
 
-    let private XsdNamespace = "http://www.w3.org/2001/XMLSchema"
-    let private NativeTypes = 
-       [for (name,t)  in 
-            [("string"      , typeof<string>);
-             ("anyURI"      , typeof<string>);
-             ("base64string", typeof<string>);
-             ("hexBinary"   , typeof<string>);
-             ("NMTOKEN"     , typeof<string>);
-             ("integer"     , typeof<int>);
-             ("int"         , typeof<int>);
-             ("byte"        , typeof<System.Int16>);
-             ("double"      , typeof<System.Double>);
-             ("decimal"     , typeof<System.Decimal>);
-             ("float"       , typeof<System.Single>);
-             ("dateTime"    , typeof<DateTime>);
-             ("time"        , typeof<DateTime>);
-             ("date"        , typeof<DateTime>);
-             ("duration"    , typeof<TimeSpan>);
-             ("boolean"     , typeof<bool>);
-             ("{http://www.w3.org/2001/XMLSchema}string"      , typeof<string>);
-             ("{http://www.w3.org/2001/XMLSchema}anyURI"      , typeof<string>);
-             ("{http://www.w3.org/2001/XMLSchema}base64string", typeof<string>);
-             ("{http://www.w3.org/2001/XMLSchema}hexBinary"   , typeof<string>);
-             ("http://www.w3.org/2001/XMLSchema}NMTOKEN"      , typeof<string>);
-             ("{http://www.w3.org/2001/XMLSchema}integer"     , typeof<int>);
-             ("{http://www.w3.org/2001/XMLSchema}int"         , typeof<int>);
-             ("{http://www.w3.org/2001/XMLSchema}byte"        , typeof<System.Int16>);
-             ("{http://www.w3.org/2001/XMLSchema}double"      , typeof<System.Double>);
-             ("{http://www.w3.org/2001/XMLSchema}decimal"     , typeof<System.Decimal>);
-             ("{http://www.w3.org/2001/XMLSchema}float"       , typeof<System.Single>);
-             ("{http://www.w3.org/2001/XMLSchema}dateTime"    , typeof<DateTime>);
-             ("{http://www.w3.org/2001/XMLSchema}time"        , typeof<DateTime>);
-             ("{http://www.w3.org/2001/XMLSchema}date"        , typeof<DateTime>);
-             ("{http://www.w3.org/2001/XMLSchema}duration"    , typeof<TimeSpan>);
-             ("{http://www.w3.org/2001/XMLSchema}boolean"     , typeof<bool>);
-             ] 
-               do
-                  yield (name, InferedType.Primitive(t,None,false))] |> Map.ofList
     let private getName (typ:XmlType) =
-        let typeDeclaration, name  =
-            match typ with
-            Simple(typ) -> typ.TypeDeclaration :> XmlSchemaType, typ.TypeDeclaration |> getSchemaTypeName
-            | Complex(t) -> 
-                  t.TypeDeclaration  :> XmlSchemaType, t.TypeDeclaration |> getSchemaTypeName
-        let name = 
+        let nameOfDeclaredType typeDeclaration name =
             match name with
             | Some n -> 
                 n
@@ -371,6 +373,18 @@ module XsdBuilder =
                 |> getParentElements
                 |> List.map (fun el -> (el :?> XmlSchemaElement).Name)
                 |> String.Concat
+
+        let name = 
+            match typ with
+            Simple(typ) -> nameOfDeclaredType (typ.TypeDeclaration :> XmlSchemaType) (typ.TypeDeclaration |> getSchemaTypeName)
+            | Complex(t) -> 
+                  nameOfDeclaredType (t.TypeDeclaration  :> XmlSchemaType) (t.TypeDeclaration |> getSchemaTypeName)
+            | Native t ->
+                  match t with
+                  | InferedType.Primitive(t,_,_) ->
+                     t.Name
+                  | _ -> failwithf "A native type must be primitive but got %A" t
+
         assert (name |>  String.IsNullOrWhiteSpace |> not)
         name
 
@@ -404,99 +418,105 @@ module XsdBuilder =
                       (InferedTypeTag.Record (Some name),(multiplicity, elemType)))
 
     and private getTypeFromAnnotated (_types:System.Collections.Generic.Dictionary<string,InferedType>) (el:XmlSchemaAnnotated) : InferedType =
+         
          let getTypeFromAnnotated el = getTypeFromAnnotated _types el
          let createElements = createElements getTypeFromAnnotated
-         let schemaType = 
-              match el with
-              Element  e -> 
-                   e.ElementSchemaType
-              | Attribute  e -> e.AttributeSchemaType :> XmlSchemaType
-              | Type(t) ->
-                  match t with
-                  Complex  t -> t.TypeDeclaration :> XmlSchemaType
-                  | Simple t -> t.TypeDeclaration :> XmlSchemaType
-              |_ -> failwithf "Expected an element or an attribute but got %A" el 
-         let typeName, typ = 
-              let typ =
-                  match schemaType with
-                  | Type(s) ->
-                       s
-                  | _ -> failwithf "unknown type declaration for %A. Type declaration was %A" el schemaType
-              typ |> getName, typ
-         match _types.TryGetValue typeName with
-         true,t -> t
-         | _ ->
-             let t = 
-                 match typ with
-                 Simple(SimpleType.Restricted(_,re)) ->
-                     match re with
-                     Restriction re ->
-                         match re.BaseType with
-                         null -> NativeTypes.[re.BaseTypeName |> qnToString]
-                         | _ as baseType -> baseType |> getTypeFromAnnotated
-                     | Union _ ->
-                         failwith "unions not supported"
-                     | List _ ->
-                         failwith "lists not supported"
-                 | Simple(SimpleType.Basic typeDeclaration) as t->
-                      let name = t |> getName 
-                      match name |> NativeTypes.TryFind with
-                      None -> 
-                          //if it's an undeclared XSD native type use string as the representation
-                          if (typeDeclaration.QualifiedName.Namespace = XsdNamespace) then 
-                             NativeTypes.["string"]
-                          else
-                             let t = 
-                                 match typeDeclaration |> getTypeFromAnnotated with 
-                                 InferedType.Primitive(_) as t -> t 
-                                 | InferedType.Record(Some _,[{Name = "";Type = t}], _) -> t 
-                                 | _ as t-> failwithf "Can't use %A for a simple type" t 
-                             assert not (String.IsNullOrWhiteSpace typeName)
-                             InferedType.Record( 
-                                 Some typeName, 
-                                   [{Name = ""; 
-                                     Type =  t}],false) 
-                     | Some t -> t
-                 | Complex(t) ->
-                     let objs = 
-                        t.TypeDeclaration
-                        |> getElementsFromObject 
-                     let (elements, attributes) = 
-                        objs
-                        |> List.fold (fun (els,attrs) e -> 
-                                        match e with
-                                        Attribute a -> (els,a::attrs)
-                                        | Element e -> (e::els,attrs)
-                                        | _ ->  els,attrs) ([],[])
-                        |> (fun (els,attrs) ->
-                             els
-                             |> createElements,
-                              attrs 
-                              |> List.map( 
-                                  fun a ->
-                                      let typ = a |> getTypeFromAnnotated
-                                      let name = a.Name 
-                                      let opt = a.Use = XmlSchemaUse.Optional 
-                                      let t =
-                                          match typ with
-                                          InferedType.Record
-                                                   (Some _,
-                                                    [{Name = _;
-                                                      Type = pt}], _) -> 
-                                                          match pt with
-                                                          InferedType.Primitive(t,u,_) -> InferedType.Primitive(t,u,opt)
-                                                          | _ -> failwithf "Primitive type expected for attribute %A" pt      
-                                          | InferedType.Primitive(_) as t -> t
-                                          | _ as t -> failwithf "Unexpected type %A " t
-                                      {Name = name;
-                                       Type = t}))
-                     assert not (String.IsNullOrWhiteSpace typeName)
-                     InferedType.Record(
-                              Some typeName,
-                                {Name = "";
-                                  Type = InferedType.Collection(elements |> List.map(fun (tag,_) -> tag) , elements |> Map.ofList)}::attributes,false)
-             _types.Add(typeName,t) |> ignore
-             t
+         let getDeclaredType schemaType =
+             let typeName, typ = 
+                  let typ =
+                      match schemaType with
+                      | Type(s) ->
+                           s
+                      | _ -> failwithf "unknown type declaration for %A. Type declaration was %A" el schemaType
+                  typ |> getName, typ
+             match _types.TryGetValue typeName with
+             true,t -> t
+             | _ ->
+                 let t = 
+                     match typ with
+                     Native t -> t
+                     | Simple(SimpleType.Restricted(_,re)) ->
+                         match re with
+                         Restriction re ->
+                             match re.BaseType with
+                             null -> NativeTypes.[re.BaseTypeName |> qnToString]
+                             | _ as baseType -> 
+                                 baseType |> getTypeFromAnnotated
+                         | Union _ ->
+                             failwith "unions not supported"
+                         | List _ ->
+                             failwith "lists not supported"
+                     | Simple(SimpleType.Basic typeDeclaration) as t->
+                          let name = t |> getName 
+                          match name |> NativeTypes.TryFind with
+                          None -> 
+                              //if it's an undeclared XSD native type use string as the representation
+                              if (typeDeclaration.QualifiedName.Namespace = XsdNamespace) then 
+                                 NativeTypes.["string"]
+                              else
+                                 let t = 
+                                     match typeDeclaration |> getTypeFromAnnotated with 
+                                     InferedType.Primitive(_) as t -> t 
+                                     | InferedType.Record(Some _,[{Name = "";Type = t}], _) -> t 
+                                     | _ as t-> failwithf "Can't use %A for a simple type" t 
+                                 assert not (String.IsNullOrWhiteSpace typeName)
+                                 InferedType.Record( 
+                                     Some typeName, 
+                                       [{Name = ""; 
+                                         Type =  t}],false) 
+                         | Some t -> t
+                     | Complex(t) ->
+                         let objs = 
+                            t.TypeDeclaration
+                            |> getElementsFromObject 
+                         let (elements, attributes) = 
+                            objs
+                            |> List.fold (fun (els,attrs) e -> 
+                                            match e with
+                                            Attribute a -> (els,a::attrs)
+                                            | Element e -> (e::els,attrs)
+                                            | _ ->  els,attrs) ([],[])
+                            |> (fun (els,attrs) ->
+                                 els
+                                 |> createElements,
+                                  attrs 
+                                  |> List.map( 
+                                      fun a ->
+                                          let typ = a |> getTypeFromAnnotated
+                                          let name = a.Name 
+                                          let opt = a.Use = XmlSchemaUse.Optional 
+                                          let t =
+                                              match typ with
+                                              InferedType.Record
+                                                       (Some _,
+                                                        [{Name = _;
+                                                          Type = pt}], _) -> 
+                                                              match pt with
+                                                              InferedType.Primitive(t,u,_) -> InferedType.Primitive(t,u,opt)
+                                                              | _ -> failwithf "Primitive type expected for attribute %A" pt      
+                                              | InferedType.Primitive(_) as t -> t
+                                              | _ as t -> failwithf "Unexpected type %A " t
+                                          {Name = name;
+                                           Type = t}))
+                         assert not (String.IsNullOrWhiteSpace typeName)
+                         InferedType.Record(
+                                  Some typeName,
+                                    {Name = "";
+                                      Type = InferedType.Collection(elements |> List.map(fun (tag,_) -> tag) , elements |> Map.ofList)}::attributes,false)
+                 _types.Add(typeName,t) |> ignore
+                 t
+
+         match el with
+         Element  e -> 
+               e.ElementSchemaType |> getDeclaredType
+         | Attribute  e -> e.AttributeSchemaType |> getDeclaredType
+         | Type(t) ->
+              match t with
+              Complex  t -> t.TypeDeclaration |> getDeclaredType
+              | Simple t -> t.TypeDeclaration |> getDeclaredType
+              | Native t -> t
+         |_ -> failwithf "Expected an element or an attribute but got %A" el 
+        
     
     let generateType (schema:System.Xml.Schema.XmlSchemaSet) =
 
