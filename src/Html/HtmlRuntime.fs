@@ -37,8 +37,7 @@ type HtmlTable =
       Html : HtmlNode }
     override x.ToString() =
         let sb = StringBuilder()
-        use wr = new StringWriter(sb) 
-        wr.WriteLine(x.Name)
+        sb.AppendLine x.Name |> ignore
         let data = array2D x.Rows
         let rows = data.GetLength(0)
         let columns = data.GetLength(1)
@@ -47,8 +46,8 @@ type HtmlTable =
             widths.[c] <- max (widths.[c]) (cell.Length))
         for r in 0 .. rows - 1 do
             for c in 0 .. columns - 1 do
-                wr.Write(data.[r,c].PadRight(widths.[c] + 1))
-            wr.WriteLine()
+                sb.Append(data.[r,c].PadRight(widths.[c] + 1)) |> ignore
+            sb.AppendLine() |> ignore
         sb.ToString()
 
 /// Representation of an HTML list
@@ -56,12 +55,26 @@ type HtmlList =
     { Name : string
       Values : string[]
       Html : HtmlNode }
+    override x.ToString() = 
+        let sb = StringBuilder()
+        sb.AppendLine x.Name |> ignore
+        for value in x.Values do 
+            sb.AppendLine value |> ignore
+        sb.ToString()
 
 /// Representation of an HTML definition list
 type HtmlDefinitionList = 
     { Name : string
       Definitions : HtmlList list
       Html : HtmlNode }
+    override x.ToString() = 
+        let sb = StringBuilder()
+        sb.AppendLine x.Name |> ignore
+        for list in x.Definitions do 
+            sb.AppendLine list.Name |> ignore
+            for value in list.Values do 
+                sb.AppendLine value |> ignore
+        sb.ToString()
 
 /// Representation of an HTML table, list, or definition list
 type HtmlObject = 
@@ -127,6 +140,14 @@ module HtmlRuntime =
                      | _ -> defaultName
                 | h :: _ -> h.InnerText()
                 
+    module private Array =
+        
+        let countWhile predicate array =
+            let mutable i = 0
+            while i < Array.length array && predicate array.[i] do
+                i <- i + 1                
+            i
+
     let private parseTable inferenceParameters includeLayoutTables makeUnique index (table:HtmlNode, parents:HtmlNode list) = 
         let rows =
             let header =
@@ -170,16 +191,33 @@ module HtmlRuntime =
                         if i < rows.Length && j < numberOfColumns
                         then res.[i].[j] <- data
 
+        let numberOfHeaderRows = res |> Array.countWhile (Array.forall (fun cell -> cell.IsHeader))
+
+        let hasRealHeaders, res = 
+            match numberOfHeaderRows with
+            | 0 -> false, res
+            | 1 -> true, res
+            | _ ->
+                for i = 1 to numberOfHeaderRows - 1 do
+                    for j = 0 to numberOfColumns - 1 do
+                        let previousCell = res.[i-1].[j]
+                        let thisCell = res.[i].[j]
+                        if previousCell.Data <> "" && thisCell.Data <> "" && thisCell.Data <> previousCell.Data then
+                            res.[i].[j] <- Cell(true, previousCell.Data + " - " + thisCell.Data)
+        
+                true, res.[numberOfHeaderRows-1..]
+            
         let hasHeaders, headerNamesAndUnits, inferedProperties = 
             match inferenceParameters with
             | None -> None, None, None
             | Some inferenceParameters ->
                 let hasHeaders, headerNames, units, inferedProperties = 
-                    if res.[0] |> Array.forall (fun r -> r.IsHeader) 
-                    then true, res.[0] |> Array.map (fun x -> x.Data) |> Some, None, None
-                    else res
-                         |> Array.map (Array.map (fun x -> x.Data))
-                         |> HtmlInference.inferHeaders inferenceParameters
+                    if hasRealHeaders then 
+                        true, res.[0] |> Array.map (fun x -> x.Data) |> Some, None, None
+                    else 
+                        res
+                        |> Array.map (Array.map (fun x -> x.Data))
+                        |> HtmlInference.inferHeaders inferenceParameters
         
                 // headers and units may already be parsed in inferHeaders
                 let headerNamesAndUnits =
