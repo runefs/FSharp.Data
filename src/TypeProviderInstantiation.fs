@@ -5,7 +5,6 @@ open System.IO
 open ProviderImplementation
 open ProviderImplementation.ProvidedTypes
 open FSharp.Data.Runtime
-open FSharp.Data.Runtime.Freebase.FreebaseRequests
 
 type CsvProviderArgs = 
     { Sample : string
@@ -36,10 +35,10 @@ type XmlProviderArgs =
       InferTypesFromValues : bool }
 
 type XsdProviderArgs = 
-    { SchemaFile : string
+    { Schema : string
       ResolutionFolder : string
-      IncludeMetadata : bool
-      FailOnUnsupported : bool }
+      Encoding : string
+      EmbeddedResource : string  }
 
 type JsonProviderArgs = 
     { Sample : string
@@ -65,29 +64,19 @@ type WorldBankProviderArgs =
     { Sources : string
       Asynchronous : bool }
 
-type FreebaseProviderArgs =
-    { Key : string
-      ServiceUrl : string
-      NumIndividuals : int
-      UseUnitsOfMeasure : bool 
-      Pluralize : bool 
-      SnapshotDate : string
-      LocalCache : bool
-      AllowLocalQueryEvaluation : bool
-      UseRefinedTypes: bool }
-
 type TypeProviderInstantiation = 
     | Csv of CsvProviderArgs
     | Xml of XmlProviderArgs
     | Xsd of XsdProviderArgs
+    | Comment
     | Json of JsonProviderArgs
     | Html of HtmlProviderArgs
     | WorldBank of WorldBankProviderArgs
-    | Freebase of FreebaseProviderArgs
 
     member x.GenerateType resolutionFolder runtimeAssembly =
         let f, args =
             match x with
+            | Comment -> failwith "Can't instantiate a comment"
             | Csv x -> 
                 (fun cfg -> new CsvProvider(cfg) :> TypeProviderForNamespaces),
                 [| box x.Sample
@@ -118,10 +107,10 @@ type TypeProviderInstantiation =
                    box x.InferTypesFromValues |] 
             | Xsd x ->
                 (fun cfg -> new XsdProvider(cfg) :> TypeProviderForNamespaces),
-                [| box x.SchemaFile
-                   box x.ResolutionFolder
-                   box x.IncludeMetadata
-                   box x.FailOnUnsupported |] 
+                [| box x.Schema
+                   box x.ResolutionFolder 
+                   box x.Encoding
+                   box x.EmbeddedResource |] 
             | Json x -> 
                 (fun cfg -> new JsonProvider(cfg) :> TypeProviderForNamespaces),
                 [| box x.Sample
@@ -146,21 +135,11 @@ type TypeProviderInstantiation =
                 (fun cfg -> new WorldBankProvider(cfg) :> TypeProviderForNamespaces),
                 [| box x.Sources
                    box x.Asynchronous |] 
-            | Freebase x ->
-                (fun cfg -> new FreebaseTypeProvider(cfg) :> TypeProviderForNamespaces),
-                [| box x.Key
-                   box x.ServiceUrl
-                   box x.NumIndividuals
-                   box x.UseUnitsOfMeasure 
-                   box x.Pluralize
-                   box x.SnapshotDate
-                   box x.LocalCache
-                   box x.AllowLocalQueryEvaluation 
-                   box x.UseRefinedTypes |]
         Debug.generate resolutionFolder runtimeAssembly f args
 
     override x.ToString() =
         match x with
+        | Comment -> [""]
         | Csv x -> 
             ["Csv"
              x.Sample
@@ -180,10 +159,9 @@ type TypeProviderInstantiation =
              x.Culture
              x.InferTypesFromValues.ToString() ]
         | Xsd x -> 
-            ["Xsd"
-             x.SchemaFile
-             x.IncludeMetadata.ToString()
-             x.FailOnUnsupported.ToString()]
+            ["Xml"
+             x.Schema
+             x.Encoding ]
         | Json x -> 
             ["Json"
              x.Sample
@@ -195,16 +173,12 @@ type TypeProviderInstantiation =
             ["Html"
              x.Sample
              x.PreferOptionals.ToString()
+             x.IncludeLayoutTables.ToString()
              x.Culture]
         | WorldBank x -> 
             ["WorldBank"
              x.Sources
              x.Asynchronous.ToString()]
-        | Freebase x -> 
-            ["Freebase"
-             x.NumIndividuals.ToString()
-             x.UseUnitsOfMeasure.ToString()
-             x.Pluralize.ToString()]
         |> String.concat ","
 
     member x.ExpectedPath outputFolder = 
@@ -214,9 +188,7 @@ type TypeProviderInstantiation =
         let replace (oldValue:string) (newValue:string) (str:string) = str.Replace(oldValue, newValue)        
         let output = 
             x.GenerateType resolutionFolder runtimeAssembly
-            |> match x with
-               | Freebase _ -> Debug.prettyPrint signatureOnly ignoreOutput 5 10
-               | _ -> Debug.prettyPrint signatureOnly ignoreOutput 10 100
+            |> Debug.prettyPrint signatureOnly ignoreOutput 10 100
             |> replace "FSharp.Data.Runtime." "FDR."
             |> replace resolutionFolder "<RESOLUTION_FOLDER>"
         if outputFolder <> "" then
@@ -227,6 +199,7 @@ type TypeProviderInstantiation =
         let args = line.Split [|','|]
         args.[0],
         match args.[0] with
+        | s when s.StartsWith("//") -> Comment
         | "Csv" ->
             Csv { Sample = args.[1]
                   Separators = args.[2]
@@ -254,10 +227,10 @@ type TypeProviderInstantiation =
                   EmbeddedResource = "" 
                   InferTypesFromValues = args.[5] |> bool.Parse }
         | "Xsd" ->
-            Xsd { SchemaFile = args.[1]
+            Xsd { Schema = args.[1]
                   ResolutionFolder = ""
-                  IncludeMetadata = true
-                  FailOnUnsupported = false } 
+                  Encoding = ""
+                  EmbeddedResource = "" }
         | "Json" ->
             Json { Sample = args.[1]
                    SampleIsList = args.[2] |> bool.Parse
@@ -279,16 +252,6 @@ type TypeProviderInstantiation =
         | "WorldBank" ->
             WorldBank { Sources = args.[1]
                         Asynchronous = args.[2] |> bool.Parse }
-        | "Freebase" ->
-            Freebase { Key = args.[1]
-                       NumIndividuals = args.[2] |> Int32.Parse
-                       UseUnitsOfMeasure = args.[3] |> bool.Parse
-                       Pluralize = args.[4] |> bool.Parse
-                       SnapshotDate = ""
-                       ServiceUrl = FreebaseQueries.DefaultServiceUrl
-                       LocalCache = true
-                       AllowLocalQueryEvaluation = true 
-                       UseRefinedTypes = true }
         | _ -> failwithf "Unknown: %s" args.[0]
 
 open System.Runtime.CompilerServices

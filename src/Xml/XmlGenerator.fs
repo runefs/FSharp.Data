@@ -166,15 +166,7 @@ module internal XmlTypeBuilder =
             let typ, _, conv, _ = getTypesForPrimitives ctx false [ primitive ] |> Seq.exactlyOne
             { ConvertedType = typ
               Converter = conv }
-
-        | InferedType.Constant(_,t,v)
-        | InferedType.Record(Some _, [{ Name = ""
-                                        Type = InferedType.Constant(_,t,v)}], false) ->
        
-            let conv = fun _ -> <@@ v @@>
-            { ConvertedType = t
-              Converter = conv }
-
         // If the element is a heterogeneous type containing records, generate type with multiple
         // optional properties (this can only happen when using sample list with multiple root
         // elements of different names). Otherwise, heterogeneous types appear only as child elements
@@ -331,8 +323,8 @@ module internal XmlTypeBuilder =
                     let childResults =
                         [ for child in children ->
 
-                            let isListName parentName childName =
-                                parentName = NameUtils.pluralize childName || parentName = childName + "Array" || parentName = childName + "List"
+                            let isCollectionName parentName childName =
+                                parentName = NameUtils.pluralize childName || parentName.StartsWith childName
 
                             let child = 
                                 match child with
@@ -341,7 +333,7 @@ module internal XmlTypeBuilder =
                                    InferedType.Record(Some parentNameWithNS2,
                                                       [ { Type = InferedType.Collection (_, SingletonMap (InferedTypeTag.Record (Some childNameWithNS), 
                                                                                                          (_, InferedType.Record(Some childNameWithNS2, _, false) as multiplicityAndType))) } ], false)) 
-                                  when parentNameWithNS = parentNameWithNS2 && childNameWithNS = childNameWithNS2 && isListName (XName.Get(parentNameWithNS).LocalName) (XName.Get(childNameWithNS).LocalName) -> 
+                                  when parentNameWithNS = parentNameWithNS2 && childNameWithNS = childNameWithNS2 && isCollectionName (XName.Get(parentNameWithNS).LocalName) (XName.Get(childNameWithNS).LocalName) -> 
                                       let combinedName = Some (parentNameWithNS + "|" + childNameWithNS)
                                       InferedTypeTag.Record combinedName, multiplicityAndType
                                 | x -> x
@@ -366,7 +358,8 @@ module internal XmlTypeBuilder =
                                 // return array of XmlElement - it might be for example int[])
                                 | InferedMultiplicity.Multiple ->
                                     let convFunc = ReflectionHelpers.makeDelegate result.Converter (ctx.Replacer.ToRuntime typeof<XmlElement>)
-                                    let name = makeUnique (NameUtils.pluralize names.[0])
+                                    let isCollectionName = names.[0].EndsWith "List" || names.[0].EndsWith "Array" || names.[0].EndsWith "Collection"
+                                    let name = makeUnique (if isCollectionName then names.[0] else NameUtils.pluralize names.[0])
                                     let typ = result.ConvertedType.MakeArrayType()
                                     nameWithNS,
                                     ProvidedProperty(name, typ, GetterCode = fun (Singleton xml) -> 

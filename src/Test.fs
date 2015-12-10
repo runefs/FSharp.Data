@@ -34,58 +34,63 @@ let dumpAll inst =
     //dump false false Portable7 false inst
     dump false false Portable47 false inst
 
-Html { Sample = "doctor_who.html"
-       PreferOptionals = false
-       IncludeLayoutTables = false
-       MissingValues = "NaN,NA,#N/A,:"
-       Culture = "" 
-       Encoding = ""
-       ResolutionFolder = ""
-       EmbeddedResource = "" }
-|> dumpAll
+//Html { Sample = "doctor_who2.html"
+//       PreferOptionals = false
+//       IncludeLayoutTables = false
+//       MissingValues = "NaN,NA,N/A,#N/A,:,-,TBA,TBD"
+//       Culture = "" 
+//       Encoding = ""
+//       ResolutionFolder = ""
+//       EmbeddedResource = "" }
+//|> dumpAll
 
-Json { Sample = "optionals.json"
-       SampleIsList = false
-       RootName = ""
-       Culture = ""
-       Encoding = ""
-       ResolutionFolder = ""
-       EmbeddedResource = ""
-       InferTypesFromValues = true }
-|> dumpAll
+//Json { Sample = "optionals.json"
+//       SampleIsList = false
+//       RootName = ""
+//       Culture = ""
+//       Encoding = ""
+//       ResolutionFolder = ""
+//       EmbeddedResource = ""
+//       InferTypesFromValues = true }
+//|> dumpAll
 
-Xml { Sample = "JsonInXml.xml"
-      SampleIsList = true
-      Global = false
-      Culture = ""
-      Encoding = ""
-      ResolutionFolder = ""
-      EmbeddedResource = ""
-      InferTypesFromValues = true }
-|> dumpAll
-
-Csv { Sample = "AirQuality.csv"
-      Separators = ";"
-      InferRows = Int32.MaxValue
-      Schema = ""
-      HasHeaders = true
-      IgnoreErrors = false
-      SkipRows = 0
-      AssumeMissingValues = false
-      PreferOptionals = false
-      Quote = '"'
-      MissingValues = "NaN,NA,#N/A,:"
-      CacheRows = true
-      Culture = ""
-      Encoding = ""
-      ResolutionFolder = ""
-      EmbeddedResource = "" }
-|> dumpAll
+//Xml { Sample = "JsonInXml.xml"
+//      SampleIsList = true
+//      Global = false
+//      Culture = ""
+//      Encoding = ""
+//      ResolutionFolder = ""
+//      EmbeddedResource = ""
+//      InferTypesFromValues = true }
+//|> dumpAll
+//
+//Csv { Sample = "AirQuality.csv"
+//      Separators = ";"
+//      InferRows = Int32.MaxValue
+//      Schema = ""
+//      HasHeaders = true
+//      IgnoreErrors = false
+//      SkipRows = 0
+//      AssumeMissingValues = false
+//      PreferOptionals = false
+//      Quote = '"'
+//      MissingValues = "NaN,NA,N/A,#N/A,:,-,TBA,TBD"
+//      CacheRows = true
+//      Culture = ""
+//      Encoding = ""
+//      ResolutionFolder = ""
+//      EmbeddedResource = "" }
+//|> dumpAll
 
 let testCases =
     __SOURCE_DIRECTORY__ ++ ".." ++ "tests" ++ "FSharp.Data.DesignTime.Tests" ++ "SignatureTestCases.config"
     |> File.ReadAllLines
-    |> Array.map (TypeProviderInstantiation.Parse >> snd)
+    |> Array.fold ( 
+      fun lst line -> 
+         let _,res = TypeProviderInstantiation.Parse  line
+         match res with
+         Comment -> lst
+         | _ -> res::lst)[]
 
 for testCase in testCases do
     dump false false Net40 true testCase
@@ -109,6 +114,13 @@ let printTables includeLayout (url:string) =
     |> HtmlRuntime.getTables (Some parameters) includeLayout
     |> List.iter (printfn "+++++++++++++++++++++++++++++++++++++\n%O")
 
+let printLists (url:string) = 
+    url
+    |> HtmlDocument.Load
+    |> HtmlRuntime.getLists
+    |> List.iter (printfn "+++++++++++++++++++++++++++++++++++++\n%O")
+
+printLists "https://en.wikipedia.org/wiki/Doctor_Who"
 printTables false "http://en.wikipedia.org/wiki/List_of_Presidents_of_the_United_States"
 printTables false "http://en.wikipedia.org/wiki/The_Championships,_Wimbledon"
 printTables false "http://www.fifa.com/u17womensworldcup/statistics/index.html"
